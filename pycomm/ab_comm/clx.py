@@ -410,10 +410,14 @@ class Driver(Base):
             # Get the data type
             if self._status[0] == SUCCESS:
                 data_type = unpack_uint(self._reply[50:52])
-                try:
-                    return UNPACK_DATA_FUNCTION[I_DATA_TYPE[data_type]](self._reply[52:]), I_DATA_TYPE[data_type]
-                except Exception as e:
-                    raise DataError(e)
+                if I_DATA_TYPE[data_type] == "STRING":
+                    data_len = UNPACK_DATA_FUNCTION['UINT'](self._reply[52:54])
+                    return self._reply[54:(54+data_len)], I_DATA_TYPE[data_type]
+                else:
+                    try:
+                        return UNPACK_DATA_FUNCTION[I_DATA_TYPE[data_type]](self._reply[52:]), I_DATA_TYPE[data_type]
+                    except Exception as e:
+                        raise DataError(e)
             else:
                 return None
 
@@ -560,9 +564,17 @@ class Driver(Base):
                     chr(len(rp) / 2),               # the Request Path Size length in word
                     rp,                             # the request path
                     pack_uint(S_DATA_TYPE[typ]),    # data type
-                    pack_uint(1),                    # Add the number of tag to write
-                    PACK_DATA_FUNCTION[typ](value)
+                    pack_uint(1)                    # Add the number of tag to write
                 ]
+
+                if typ == "STRING":
+                    str_len = len(value)
+                    message_request.append(pack_uint(str_len))
+                    message_request.append(value)
+                    if str_len % 2 != 0: message_request.append('\x00')
+
+                else:
+                    message_request.append(PACK_DATA_FUNCTION[typ](value))
 
         ret_val = self.send_unit_data(
             build_common_packet_format(
